@@ -2,16 +2,16 @@
 
 **An AI-Powered Supply Chain Simulation with Reinforcement Learning**
 
-StockPilot is an interactive visual simulation that demonstrates how a Reinforcement Learning agent learns to optimize safety stock levels in a dynamic supply chain environment.
+StockPilot is a simulation framework that demonstrates how a Reinforcement Learning agent learns to optimize safety stock levels in a dynamic supply chain environment, with detailed training and evaluation charts saved automatically.
 
 ## Features
 
 ✨ **Core Capabilities**
-- **RL-Powered Optimization**: Stable-Baselines3 agent learns to balance inventory costs, stockouts, and service levels
+- **RL-Powered Optimization**: Stable-Baselines3 PPO agent learns to balance inventory costs, stockouts, and service levels
 - **Realistic Supply Chain Dynamics**: Variable lead times, stochastic demand with spikes, and multiple cost factors
-- **Interactive Dashboard**: Real-time Streamlit visualization with metrics, charts, and comparison analysis
 - **Baseline Comparison**: Rule-based fixed safety stock policy for performance benchmarking
-- **Professional Visualization**: Color-coded inventory status, animated timelines, and comprehensive metrics
+- **Automated Visualization**: Timestamped results directory with train/test charts and metrics saved per run
+- **Cost Breakdown Analysis**: Holding, stockout, and ordering costs tracked separately for Baseline and RL
 
 ## Project Structure
 
@@ -24,14 +24,17 @@ stock-pilot-ai/
 │   ├── agents/               # Baseline and RL policies
 │   │   ├── baseline_policy.py
 │   │   └── rl_trainer.py
-│   ├── simulation/           # Core simulation logic
-│   │   └── simulator.py
 │   └── utils/
 │       └── metrics.py
-├── dashboard/
-│   └── app.py               # Streamlit dashboard
-├── models/                  # Trained models & logs
-├── data/                    # Simulation results
+├── results/                  # Timestamped run outputs
+│   └── YYYY-MM-DD_HH-MM-SS/
+│       ├── train_period_chart.png
+│       ├── test_period_chart.png
+│       ├── metrics.json
+│       └── summary.txt
+├── models/                   # Trained model checkpoints
+├── tests/                    # Test suite
+├── test_visualization.py     # Main training & evaluation script
 └── requirements.txt
 ```
 
@@ -39,9 +42,8 @@ stock-pilot-ai/
 
 - **Simulation**: Custom Gym-style environment
 - **RL Framework**: Stable-Baselines3 (PPO agent)
-- **Visualization**: Streamlit dashboard
+- **Visualization**: Matplotlib (PNG charts per run)
 - **Data Processing**: NumPy, Pandas
-- **Charting**: Plotly
 
 ## Quick Start
 
@@ -51,22 +53,22 @@ stock-pilot-ai/
 pip install -r requirements.txt
 ```
 
-### Train the RL Agent
+### Train the RL Agent & Generate Charts
 
 ```bash
-python src/agents/rl_trainer.py
+python test_visualization.py
 ```
 
-### Run the Dashboard
-
-```bash
-streamlit run dashboard/app.py
-```
+This will:
+1. Train a PPO agent for 20 000 timesteps
+2. Evaluate both Baseline and RL on train and test periods
+3. Save charts, metrics JSON, and a summary text to `results/<timestamp>/`
 
 ## How It Works
 
 ### Environment State
 - Current inventory level
+- Safety stock level
 - Incoming orders (pipeline status)
 - Recent demand history
 - Estimated lead time
@@ -94,9 +96,20 @@ Maximize efficiency by balancing:
 - Variable lead times (1-5 days)
 - Holding costs, stockout penalties, ordering costs
 
+## Output Charts
+
+Each run produces two 2×2 charts (Train and Test period):
+
+| Position | Content |
+|----------|---------|
+| Top-left | Baseline Inventory vs Safety Stock line |
+| Top-right | RL Inventory vs dynamic Safety Stock |
+| Bottom-left | Baseline cumulative cost breakdown (Holding / Stockout / Ordering) |
+| Bottom-right | RL cumulative cost breakdown (Holding / Stockout / Ordering) |
+
 ## Results & Metrics
 
-The dashboard displays:
+Saved automatically to `results/<timestamp>/metrics.json`:
 
 | Metric | Description |
 |--------|-------------|
@@ -104,33 +117,6 @@ The dashboard displays:
 | **Service Level** | % of demand fulfilled without stockouts |
 | **Stockout Count** | Number of stockout events |
 | **Avg Inventory** | Average inventory level over time |
-
-**RL Agent vs Baseline:**
-- Typically achieves 15-25% cost reduction
-- Higher service level with smarter inventory management
-- Adaptive response to demand variability
-
-## Dashboard Features
-
-📊 **Visualizations:**
-- Inventory levels over time (with safety stock overlay)
-- Orders placed and delivery tracking
-- Demand vs fulfilled demand
-- Cost breakdown analysis
-- Side-by-side RL vs Baseline comparison
-
-🎨 **Color Coding:**
-- 🟢 Green: Healthy inventory levels
-- 🔴 Red: Stockout events
-- 🟡 Yellow: Warning zone
-
-## LinkedIn Content
-
-Perfect for engagement! The project demonstrates:
-- Practical AI applications in supply chain
-- RL solving real business problems
-- Visual storytelling of AI decision-making
-- Quantifiable cost savings
 
 ---
 

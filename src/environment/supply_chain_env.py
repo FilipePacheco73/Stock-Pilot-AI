@@ -20,8 +20,8 @@ class SupplyChainEnv(gym.Env):
     - Estimated lead time
     
     Action:
-    - Safety stock level adjustment (continuous: -10 to +10)
-    - Order quantity decision
+    - Safety stock adjustment (continuous, normalized)
+    - MRP computes order quantity from shortage automatically
     
     Reward:
     - Negative cost: holding + stockout + ordering
@@ -43,6 +43,8 @@ class SupplyChainEnv(gym.Env):
         demand_spike_prob: float = 0.1,
         demand_spike_multiplier: float = 2.5,
         episode_length: int = 365,
+        max_order_qty: int = 500,
+        initial_safety_stock: int = 75,
         seed: int = None,
     ):
         """
@@ -60,6 +62,8 @@ class SupplyChainEnv(gym.Env):
             demand_spike_prob: Probability of demand spike
             demand_spike_multiplier: Multiplier for spike demand
             episode_length: Number of days per episode
+            max_order_qty: Maximum replenishment quantity per step
+            initial_safety_stock: Initial safety stock level
             seed: Random seed
         """
         super().__init__()
@@ -76,13 +80,15 @@ class SupplyChainEnv(gym.Env):
         self.demand_spike_prob = demand_spike_prob
         self.demand_spike_multiplier = demand_spike_multiplier
         self.episode_length = episode_length
+        self.max_order_qty = max_order_qty
+        self.initial_safety_stock = initial_safety_stock
         
         # RNG
         self.rng = np.random.RandomState(seed)
         
         # State variables
         self.inventory = initial_inventory
-        self.safety_stock = max(10, int(demand_mean * 0.5))  # Initial safety stock
+        self.safety_stock = int(np.clip(initial_safety_stock, 5, 300))
         self.pipeline = []  # List of (quantity, days_remaining)
         self.current_step = 0
         
@@ -95,19 +101,18 @@ class SupplyChainEnv(gym.Env):
         self.lead_time_history = []
         self.fulfilled_demand_history = []
         
-        # Action space: [safety_stock_adjustment, order_quantitity]
-        # Safety stock: -10 to +10 adjustment
-        # Order quantity: 0 (no order) to max inventory
+        # Agent chooses only safety-stock adjustment (normalized).
+        # action[0] in [-1, 1] -> safety-stock adjustment in [-10, +10] units
         self.action_space = spaces.Box(
-            low=np.array([-10.0, 0.0]),
-            high=np.array([10.0, 500.0]),
+            low=np.array([-1.0]),
+            high=np.array([1.0]),
             dtype=np.float32
         )
         
         # Observation space: [inventory, safety_stock, pipeline_qty, avg_demand_7d, lead_time_est]
         self.observation_space = spaces.Box(
             low=np.array([0.0, 0.0, 0.0, 0.0, 1.0]),
-            high=np.array([500.0, 200.0, 500.0, 200.0, 5.0]),
+            high=np.array([500.0, 300.0, 500.0, 200.0, 5.0]),
             dtype=np.float32
         )
         
@@ -152,6 +157,18 @@ class SupplyChainEnv(gym.Env):
         ], dtype=np.float32)
         
         return state
+
+    def _decode_action(self, action: np.ndarray) -> Tuple[float, float]:
+        """Map normalized PPO action into safety-stock adjustment."""
+        clipped_action = np.clip(np.asarray(action, dtype=np.float32), self.action_space.low, self.action_space.high)
+        safety_signal = float(clipped_action[0])
+        safety_stock_adj = safety_signal * 10.0
+        return safety_stock_adj, safety_signal
+
+    def encode_action(self, safety_stock_adj: float = 0.0, *_unused) -> np.ndarray:
+        """Map safety-stock adjustment into normalized action space."""
+        safety_signal = np.clip(float(safety_stock_adj) / 10.0, -1.0, 1.0)
+        return np.array([safety_signal], dtype=np.float32)
     
     def _process_pipeline(self) -> int:
         """Process deliveries from pipeline (returns integer)."""
@@ -172,27 +189,30 @@ class SupplyChainEnv(gym.Env):
         Execute one step of environment.
         
         Args:
-            action: [safety_stock_adjustment, order_quantity]
+            action: [safety_stock_adjustment_signal]
             
         Returns:
             observation, reward, terminated, truncated, info
         """
         self.current_step += 1
         
-        # Parse action
-        safety_stock_adj = float(action[0])
-        order_qty = int(np.round(action[1]))  # Convert to integer
-        
-        # Update safety stock (with bounds)
-        self.safety_stock = max(5, int(self.safety_stock + safety_stock_adj))
-        self.safety_stock = min(200, self.safety_stock)
+        # Parse normalized action into safety-stock adjustment.
+        safety_stock_adj, safety_signal = self._decode_action(action)
+        self.safety_stock = int(np.clip(self.safety_stock + safety_stock_adj, 5, 300))
         
         # Process deliveries from pipeline
         delivered = self._process_pipeline()
         self.inventory += delivered
         
-        # Place order if requested
+        # MRP ordering: order according to shortage in inventory position.
         ordering_cost_incurred = 0.0
+        avg_demand = np.mean(self.demand_history[-7:]) if self.demand_history else self.demand_mean
+        lead_time_est = np.mean([days for _, days in self.pipeline]) if self.pipeline else (self.lead_time_min + self.lead_time_max) / 2
+        target_inventory_position = self.safety_stock + (avg_demand * lead_time_est)
+        inventory_position = self.inventory + sum(qty for qty, _ in self.pipeline)
+        shortage = max(0.0, target_inventory_position - inventory_position)
+        order_qty = int(np.clip(np.round(shortage), 0, self.max_order_qty))
+
         if order_qty > 0:  # Only incur cost if order is significant
             lead_time = self._generate_lead_time()
             self.pipeline.append((order_qty, lead_time))
@@ -214,10 +234,17 @@ class SupplyChainEnv(gym.Env):
         stockout_cost_incurred = self.stockout_cost * unfulfilled_demand
         
         total_cost = holding_cost_incurred + stockout_cost_incurred + ordering_cost_incurred
+
+        # Dense shaping: penalize weak inventory coverage before stockouts happen.
+        updated_inventory_position = self.inventory + sum(qty for qty, _ in self.pipeline)
+        updated_lead_time_est = np.mean([days for _, days in self.pipeline]) if self.pipeline else (self.lead_time_min + self.lead_time_max) / 2
+        updated_target_position = self.safety_stock + (avg_demand * updated_lead_time_est)
+        coverage_gap = max(0.0, updated_target_position - updated_inventory_position)
+        coverage_penalty = 0.2 * coverage_gap
         
         # Reward: negative cost + bonus for good service level
         service_level = fulfilled_demand / demand if demand > 0 else 1.0
-        reward = -total_cost
+        reward = -(total_cost + coverage_penalty)
         
         # Bonus for maintaining good service level
         if service_level > 0.95:
@@ -238,6 +265,8 @@ class SupplyChainEnv(gym.Env):
         
         # Info dict
         info = {
+            "raw_action": np.asarray(action, dtype=np.float32).tolist(),
+            "safety_signal": safety_signal,
             "demand": demand,
             "fulfilled_demand": fulfilled_demand,
             "unfulfilled_demand": unfulfilled_demand,
@@ -246,6 +275,10 @@ class SupplyChainEnv(gym.Env):
             "holding_cost": holding_cost_incurred,
             "stockout_cost": stockout_cost_incurred,
             "ordering_cost": ordering_cost_incurred,
+            "order_qty": order_qty,
+            "shortage": shortage,
+            "coverage_gap": coverage_gap,
+            "coverage_penalty": coverage_penalty,
             "service_level": service_level,
             "pipeline_qty": sum(qty for qty, _ in self.pipeline),
         }
@@ -266,7 +299,7 @@ class SupplyChainEnv(gym.Env):
             self.rng.seed(seed)
         
         self.inventory = self.initial_inventory
-        self.safety_stock = max(10, int(self.demand_mean * 0.5))
+        self.safety_stock = int(np.clip(self.initial_safety_stock, 5, 300))
         self.pipeline = []
         self.current_step = 0
         

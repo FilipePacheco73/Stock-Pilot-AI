@@ -3,3 +3,6 @@ pycache/
 __pycache__/
 *.pyc
 *.json
+*.zip
+*.png
+summary.txt

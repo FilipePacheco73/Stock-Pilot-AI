@@ -58,8 +58,10 @@ class BaselinePolicy:
         Returns:
             Dictionary with action: {"safety_stock_adj": float, "order_qty": float}
         """
-        # Safety stock adjustment: always try to maintain target
-        safety_stock_adj = self.safety_stock - inventory
+        current_safety_stock = kwargs.get("current_safety_stock", self.safety_stock)
+
+        # Safety stock adjustment: always try to maintain target safety stock
+        safety_stock_adj = self.safety_stock - current_safety_stock
         safety_stock_adj = np.clip(safety_stock_adj, -10.0, 10.0)
         
         # Reorder decision
@@ -121,7 +123,7 @@ def run_baseline_simulation(
             
             # Get action from policy
             action_dict = policy.decide(inventory, pipeline_qty, demand_history)
-            action = np.array([action_dict["safety_stock_adj"], action_dict["order_qty"]], dtype=np.float32)
+            action = env.encode_action(action_dict["safety_stock_adj"])
             
             # Step environment
             obs, reward, terminated, truncated, info = env.step(action)

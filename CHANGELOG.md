@@ -4,6 +4,70 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-03-22
+
+### Removed
+
+**Dashboard**
+- Deleted `dashboard/` directory (`app.py` and all related Streamlit code) — to be redesigned in a future release
+- Removed Streamlit and Plotly as active dependencies for the main workflow
+
+### Changed
+
+**Visualization (`test_visualization.py`)**
+- Unified color palette across all 4 chart panels (Train and Test): blue = inventory/holding, red = safety stock/stockout, green = ordering
+- Split cumulative cost chart into two separate breakdown panels: Baseline (bottom-left) and RL (bottom-right)
+- Each cost breakdown panel shows Holding, Stockout, and Ordering as individual lines with consistent colors
+- Removed the combined "Cumulative Cost Comparison" panel (Baseline + RL overlapped)
+- Removed the `colors` parameter from `save_period_chart()` — palette is now hardcoded inside the function for consistency across Train and Test runs
+- Baseline policy initialised with `safety_stock=300` and `reorder_point=300` (previously 75) for a fairer comparison
+
+### Added
+
+**Cost tracking per step**
+- `run_baseline_period()` and `run_rl_period()` now collect `holding_costs`, `stockout_costs`, and `ordering_costs` individually per day (previously only the total was stored)
+
+---
+
+## [0.2.0] - 2026-03-22
+
+### Changed
+
+**Dashboard Redesign - Complete Refactor**
+- Rebuilt dashboard from scratch with simplified, clean interface
+- Moved training controls to main area (not sidebar)
+- Single training button in main content for 1-period training
+- Removed multi-period training selector (users train incrementally)
+- Sidebar now contains ONLY configuration parameters
+- Much cleaner user experience with focus on key actions
+
+**Dashboard Architecture**
+- Reduced file complexity by removing complex state management
+- Simplified plotting functions (removed evolution charts)
+- Session state now minimal: training_done, simulation_results
+- Focus on immediate results rather than training history
+- Cleaner main() function structure
+- Removed DASHBOARD_GUIDE.md concepts - now very intuitive
+
+**Interface Layout**
+- Header: Title and description
+- Sidebar: Configuration options (seed, demand, cost parameters)
+- Main area: Three action buttons (Train, Status, Simulate)
+- Results: Metrics comparison + Improvement KPIs + Visualizations
+- All in one coherent flow
+
+### Removed
+
+**Overly Complex Features**
+- Multi-period training selection (1/5/10 periods)
+- Training evolution 4-metric subplot visualization
+- Training history tracking and display
+- "Show Training Results" button
+- Checkpoint management UI
+- Model status in sidebar
+
+---
+
 ## [0.1.1] - 2026-03-22
 
 ### Improved

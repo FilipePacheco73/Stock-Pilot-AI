@@ -145,7 +145,7 @@ class RLTrainer:
             log_path=self.log_dir,
             eval_freq=eval_freq,
             n_eval_episodes=3,
-            deterministic=False,
+            deterministic=True,
         )
         
         print(f"Training for {total_timesteps} timesteps...")
