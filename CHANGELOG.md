@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.1] - 2026-03-22
+
+### Improved
+
+**Data Type Refinement**
+- Integer-only demand values for clarity and realism
+- Integer inventory levels throughout simulation
+- Integer fulfilled demand quantities
+- Rounded stochastic values to nearest integer using `int(np.round())`
+- Better visualization in dashboards and reports
+
+**Codebase Quality**
+- Type hints for demand generation methods
+- Consistent integer handling in pipeline operations
+- Improved order quantity conversion to integers
+- Better variable naming for clarity
+- Enhanced code documentation
+
+**Project Organization**
+- Created dedicated `tests/` folder for test suite organization
+- Moved test files into proper test module structure
+- Created master test runner (`run_tests.py`) for unified execution
+- Added `__init__.py` to make tests a proper Python package
+- Removed redundant test files from project root
+
+**Testing Infrastructure**
+- Centralized test execution via `run_tests.py`
+- Clean test output with organized reporting
+- Quick validation of environment and policies
+- Integer value validation tests
+- Test discovery and execution framework
+
+### Changed
+
+**Core Environment**
+- `_generate_demand()` now returns `int` instead of `float`
+- `_process_pipeline()` now returns `int` instead of `float`
+- Action processing rounds order quantities to integers
+- All inventory operations use integer arithmetic
+- Order quantity threshold changed from `0.1` to `0`
+
+**Project Structure**
+- Tests moved from root to dedicated `tests/` directory
+- Test runner refactored as master entry point
+- Cleaner project root with only essential files
+- Better separation of concerns
+
+**Documentation**
+- Added PROJECT_REVIEW.md for project status overview
+- Enhanced CHANGELOG with detailed improvement tracking
+- Updated project organization documentation
+- Added refinement log for tracking iterative improvements
+
+### Validation
+
+**Tests Passing**
+- Environment creation and initialization
+- Demand generation (all values are integers)
+- Inventory tracking (all values are integers)
+- Baseline policy evaluation (365-day simulation)
+- Random policy comparison
+- All imports and module structure
+
+**Performance Verified**
+- Baseline Policy: $76,415.50 cost, 63.89% service level
+- Integer conversion maintains numerical accuracy
+- No data type mismatches or rounding errors
+- Clean separation between float actions and integer states
+
 ## [0.1.0] - 2026-03-22
 
 ### Added
