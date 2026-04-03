@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0] - 2026-04-03
+
+### Added
+
+**Live Streamlit Dashboard**
+- Restored `dashboard/app.py` as an interactive end-user interface for continuous supply-chain simulation
+- Added side-by-side Manual vs RL scenario monitoring with rolling 365-day window updates
+- Added real-time user controls for holding, stockout, and ordering cost multipliers
+- Added manual-control scenario where the user directly sets the target safety stock
+- Added live RL training progress feedback during app initialization
+
+**Continuous Scenario Playback**
+- Added `ReplayScenarioEnv` to replay the same demand and lead-time schedule in both Manual and RL scenarios for fair comparison
+- Added rolling comparison of the last 365 days between Manual and RL policies
+- Added cost chart based on 365-day moving average of daily cost
+
+**Dashboard Training Domain Randomization**
+- Added `ScheduledCostTrainingEnv` for PPO training inside the dashboard with dynamic cost multipliers during learning
+- Added `generate_cost_multiplier_schedule()` to vary holding, stockout, and ordering multipliers in fixed windows during training
+- Dashboard training now exposes cost multipliers in the observation state and retrains on cost-varying scenarios before live simulation
+
+### Changed
+
+**Dashboard RL Training**
+- Dashboard initialization now always retrains the RL policy on startup instead of relying only on a pre-trained checkpoint
+- Training target in the dashboard increased to `200,000` timesteps for stronger adaptation to dynamic cost scenarios
+- Compatible checkpoints can still be loaded as a starting point, but they are retrained during initialization
+
+**Safety Stock Range**
+- Expanded manual safety-stock control from `300` to `500`
+- Updated environment support so both Manual and RL policies can operate with safety stock up to `500`
+- Made safety stock bounds configurable in `SupplyChainEnv` via `safety_stock_min` and `safety_stock_max`
+
+**Dashboard Visualization**
+- Simplified upper charts to show only inventory and safety stock, one panel for Manual and one for RL
+- Moved cost comparison into a dedicated chart below the scenario panels
+- Replaced deprecated Streamlit `use_container_width` usage with `width="stretch"`
+
+### Fixed
+
+**Dashboard Decision Context**
+- Ensured the RL policy receives observations updated with the current cost multipliers before each live decision
+- Aligned the training environment so the next observation reflects the scheduled costs consistently across steps
+
+**Environment Warnings**
+- Fixed Gymnasium `Box` precision warning by defining `low` and `high` arrays explicitly as `float32`
+
+---
+
 ## [0.4.0] - 2026-04-03
 
 ### Added

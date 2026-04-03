@@ -49,6 +49,8 @@ class SupplyChainEnv(gym.Env):
         episode_length: int = 365,
         max_order_qty: int = 500,
         initial_safety_stock: int = 75,
+        safety_stock_min: int = 5,
+        safety_stock_max: int = 300,
         seed: int = None,
     ):
         """
@@ -72,6 +74,8 @@ class SupplyChainEnv(gym.Env):
             episode_length: Number of days per episode
             max_order_qty: Maximum replenishment quantity per step
             initial_safety_stock: Initial safety stock level
+            safety_stock_min: Minimum allowed safety stock
+            safety_stock_max: Maximum allowed safety stock
             seed: Random seed
         """
         super().__init__()
@@ -94,13 +98,15 @@ class SupplyChainEnv(gym.Env):
         self.episode_length = episode_length
         self.max_order_qty = max_order_qty
         self.initial_safety_stock = initial_safety_stock
+        self.safety_stock_min = int(safety_stock_min)
+        self.safety_stock_max = int(safety_stock_max)
         
         # RNG
         self.rng = np.random.RandomState(seed)
         
         # State variables
         self.inventory = initial_inventory
-        self.safety_stock = int(np.clip(initial_safety_stock, 5, 300))
+        self.safety_stock = int(np.clip(initial_safety_stock, self.safety_stock_min, self.safety_stock_max))
         self.pipeline = []  # List of (quantity, days_remaining)
         self.current_step = 0
         
@@ -117,8 +123,8 @@ class SupplyChainEnv(gym.Env):
         # action[0] in [-1, 1] -> safety-stock adjustment in
         # [-safety_adjustment_max, +safety_adjustment_max] units
         self.action_space = spaces.Box(
-            low=np.array([-1.0]),
-            high=np.array([1.0]),
+            low=np.array([-1.0], dtype=np.float32),
+            high=np.array([1.0], dtype=np.float32),
             dtype=np.float32
         )
         
@@ -126,8 +132,8 @@ class SupplyChainEnv(gym.Env):
         # [inventory, safety_stock, pipeline_qty, avg_demand_7d, lead_time_est,
         #  holding_cost_coef, stockout_cost_coef, ordering_cost_coef]
         self.observation_space = spaces.Box(
-            low=np.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
-            high=np.array([500.0, 300.0, 500.0, 200.0, 5.0, 2.0, 20.0, 20.0]),
+            low=np.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32),
+            high=np.array([500.0, float(self.safety_stock_max), 500.0, 200.0, 5.0, 2.0, 20.0, 20.0], dtype=np.float32),
             dtype=np.float32
         )
         
@@ -216,7 +222,9 @@ class SupplyChainEnv(gym.Env):
         
         # Parse normalized action into safety-stock adjustment.
         safety_stock_adj, safety_signal = self._decode_action(action)
-        self.safety_stock = int(np.clip(self.safety_stock + safety_stock_adj, 5, 300))
+        self.safety_stock = int(
+            np.clip(self.safety_stock + safety_stock_adj, self.safety_stock_min, self.safety_stock_max)
+        )
         
         # Process deliveries from pipeline
         delivered = self._process_pipeline()
@@ -317,7 +325,7 @@ class SupplyChainEnv(gym.Env):
             self.rng.seed(seed)
         
         self.inventory = self.initial_inventory
-        self.safety_stock = int(np.clip(self.initial_safety_stock, 5, 300))
+        self.safety_stock = int(np.clip(self.initial_safety_stock, self.safety_stock_min, self.safety_stock_max))
         self.pipeline = []
         self.current_step = 0
         
