@@ -4,6 +4,51 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.0] - 2026-04-03
+
+### Added
+
+**Domain Randomization & Dynamic Cost Scenarios**
+- `ScheduledCostSupplyChainEnv` wrapper for applying cost schedule per episode (30-day regime changes)
+- `generate_cost_schedule()` function to pre-generate cost multiplier sequences for reproducible randomization
+- Cost multipliers now part of observation state (8-dimensional: inventory, safety_stock, pipeline_qty, avg_demand_7d, lead_time_est, holding_cost, stockout_cost, ordering_cost)
+- Synchronized cost schedules between Baseline and RL for fair evaluation
+
+**Enhanced Visualization**
+- Upgraded from 2×2 to 3×2 grid layout for train/test period charts
+- Row 3: Step-function plots showing cost multiplier evolution over 30-day windows (Holding, Stockout, Ordering)
+- Added total cost to legend in cumulative cost breakdown panels
+- Visual confirmation of domain randomization effects
+
+### Changed
+
+**Cost Formula Refinement**
+- Holding cost now applies to total inventory level instead of only excess above safety stock
+- Updated metric calculation in `src/utils/metrics.py` to align with environment implementation
+- More realistic total-inventory-based cost accounting
+
+**RL Agent Hyperparameter Tuning**
+- Increased training timesteps: 20,000 → 100,000 for improved convergence with domain randomization
+- Increased action scaling: 10.0 → 40.0 units per step (safety_adjustment_max) for adaptive safety stock
+- Reduced service bonus: 5.0 → 0.0 to prioritize cost minimization over service level maintenance
+- Coverage penalty coefficient: 0.1 (maintained for service floor)
+- New tuning parameters in `env_tuning` dict passed to all evaluation runs
+
+**Seed Management**
+- Aligned random seed between Baseline and RL evaluation on same test period for fair comparison
+- Baseline initialized with fixed safety_stock=300 and reorder_point=300 (from v0.3.0)
+
+### Validated
+
+**Performance Improvement**
+- **Test Period**: RL achieved +3.8% cost reduction vs Baseline ($48,187 vs $50,104, saved $1,916)
+- **Service Trade-off**: Cost optimization intentionally reduces service level from 97.01% → 93.91% (3% acceptable trade-off)
+- **Inventory Reduction**: Average inventory decreased from 209.2 → 161.1 units (-48.2 units, -22.9%)
+- **Stockout Events**: Increased from 12 → 30 (expected due to cost minimization focus)
+- **Train Period**: +8.6% cost reduction on training data (indicating good generalization potential)
+
+---
+
 ## [0.3.0] - 2026-03-22
 
 ### Removed

@@ -10,8 +10,10 @@ StockPilot is a simulation framework that demonstrates how a Reinforcement Learn
 - **RL-Powered Optimization**: Stable-Baselines3 PPO agent learns to balance inventory costs, stockouts, and service levels
 - **Realistic Supply Chain Dynamics**: Variable lead times, stochastic demand with spikes, and multiple cost factors
 - **Baseline Comparison**: Rule-based fixed safety stock policy for performance benchmarking
-- **Automated Visualization**: Timestamped results directory with train/test charts and metrics saved per run
+- **Automated Visualization**: 3×2 timestamped charts showing inventory, safety stock evolution, and cost multiplier parameters
 - **Cost Breakdown Analysis**: Holding, stockout, and ordering costs tracked separately for Baseline and RL
+- **Domain Randomization**: Cost schedules change every 30 days during training, creating adaptive optimization challenges
+- **Contextual Agent**: Observation space includes cost multipliers, enabling context-aware decision making
 
 ## Project Structure
 
@@ -60,18 +62,22 @@ python test_visualization.py
 ```
 
 This will:
-1. Train a PPO agent for 20 000 timesteps
-2. Evaluate both Baseline and RL on train and test periods
-3. Save charts, metrics JSON, and a summary text to `results/<timestamp>/`
+1. Train a PPO agent for 100,000 timesteps with domain randomization (cost schedule changes every 30 days)
+2. Evaluate both Baseline and RL on train and test periods with synchronized cost schedules
+3. Save 3×2 charts (inventory, safety stock, cost multiplier evolution), metrics JSON, and summary to `results/<timestamp>/`
+4. Display performance comparison: typically **+3-8% cost reduction** vs Baseline
 
 ## How It Works
 
-### Environment State
+### Environment State (8-Dimensional)
 - Current inventory level
 - Safety stock level
 - Incoming orders (pipeline status)
-- Recent demand history
+- Recent demand history (7-day average)
 - Estimated lead time
+- **Current holding cost multiplier** (domain randomization signal)
+- **Current stockout cost multiplier** (domain randomization signal)
+- **Current ordering cost multiplier** (domain randomization signal)
 
 ### RL Agent Actions
 - Adjust safety stock level dynamically
@@ -98,14 +104,19 @@ Maximize efficiency by balancing:
 
 ## Output Charts
 
-Each run produces two 2×2 charts (Train and Test period):
+Each run produces two 3×2 charts (Train and Test period):
 
 | Position | Content |
-|----------|---------|
-| Top-left | Baseline Inventory vs Safety Stock line |
-| Top-right | RL Inventory vs dynamic Safety Stock |
-| Bottom-left | Baseline cumulative cost breakdown (Holding / Stockout / Ordering) |
-| Bottom-right | RL cumulative cost breakdown (Holding / Stockout / Ordering) |
+|----------|----------|
+| **Row 1** | |
+| Left | Baseline Inventory vs Safety Stock |
+| Right | RL Inventory vs Adaptive Safety Stock (oscillating in response to cost changes) |
+| **Row 2** | |
+| Left | Baseline cumulative cost breakdown (Holding / Stockout / Ordering) with total |
+| Right | RL cumulative cost breakdown (Holding / Stockout / Ordering) with total |
+| **Row 3** | |
+| Left | Holding cost multiplier evolution (30-day step changes) |
+| Right | Stockout & Ordering cost multipliers (step-function visualization) |
 
 ## Results & Metrics
 
@@ -118,7 +129,22 @@ Saved automatically to `results/<timestamp>/metrics.json`:
 | **Stockout Count** | Number of stockout events |
 | **Avg Inventory** | Average inventory level over time |
 
+## Latest Results (v0.4.0)
+
+**Test Period Performance:**
+- **Cost Reduction**: +3.8% RL vs Baseline ($48,187 saved $1,916)
+- **Service Level**: 93.91% (Baseline 97.01%) — intentional trade-off for cost optimization
+- **Inventory**: 161.1 units avg (Baseline 209.2) — 22.9% reduction
+- **Stockout Events**: 30 (Baseline 12) — acceptable for cost-focused strategy
+
+**Training Setup:**
+- 100,000 timesteps with domain randomization
+- Action scaling: safety_stock_adj ∈ [-40, +40] units/step
+- Service bonus: 0.0 (cost-first optimization)
+- Coverage penalty: 0.1 (maintains minimum service floor)
+
 ---
 
-**Status:** In Development  
-**Last Updated:** March 2026
+**Status:** Stable  
+**Last Updated:** April 2026  
+**Version:** 0.4.0

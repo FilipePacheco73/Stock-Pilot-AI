@@ -61,7 +61,7 @@ class SimulationMetrics:
             
             # Estimate costs (approximate)
             inv = env.inventory_history[i] if i < len(env.inventory_history) else 0
-            holding = max(0, inv - env.safety_stock_history[i]) * env.holding_cost if i < len(env.safety_stock_history) else 0
+            holding = inv * env.holding_cost
             stockout = unfulfilled * env.stockout_cost
             
             holding_costs.append(holding)

@@ -36,6 +36,10 @@ class SupplyChainEnv(gym.Env):
         holding_cost: float = 0.5,
         stockout_cost: float = 10.0,
         ordering_cost: float = 5.0,
+        safety_adjustment_max: float = 25.0,
+        coverage_penalty_coef: float = 0.1,
+        service_bonus: float = 2.0,
+        service_bonus_threshold: float = 0.97,
         lead_time_min: int = 1,
         lead_time_max: int = 5,
         demand_mean: float = 50.0,
@@ -55,6 +59,10 @@ class SupplyChainEnv(gym.Env):
             holding_cost: Cost per unit held in inventory per day
             stockout_cost: Cost per unit of unmet demand
             ordering_cost: Fixed cost per order
+            safety_adjustment_max: Maximum absolute safety-stock adjustment per step
+            coverage_penalty_coef: Coefficient for coverage-gap shaping penalty
+            service_bonus: Reward bonus for high daily service level
+            service_bonus_threshold: Service-level threshold to trigger bonus
             lead_time_min: Minimum lead time in days
             lead_time_max: Maximum lead time in days
             demand_mean: Mean daily demand
@@ -73,6 +81,10 @@ class SupplyChainEnv(gym.Env):
         self.holding_cost = holding_cost
         self.stockout_cost = stockout_cost
         self.ordering_cost = ordering_cost
+        self.safety_adjustment_max = float(safety_adjustment_max)
+        self.coverage_penalty_coef = float(coverage_penalty_coef)
+        self.service_bonus = float(service_bonus)
+        self.service_bonus_threshold = float(service_bonus_threshold)
         self.lead_time_min = lead_time_min
         self.lead_time_max = lead_time_max
         self.demand_mean = demand_mean
@@ -102,17 +114,20 @@ class SupplyChainEnv(gym.Env):
         self.fulfilled_demand_history = []
         
         # Agent chooses only safety-stock adjustment (normalized).
-        # action[0] in [-1, 1] -> safety-stock adjustment in [-10, +10] units
+        # action[0] in [-1, 1] -> safety-stock adjustment in
+        # [-safety_adjustment_max, +safety_adjustment_max] units
         self.action_space = spaces.Box(
             low=np.array([-1.0]),
             high=np.array([1.0]),
             dtype=np.float32
         )
         
-        # Observation space: [inventory, safety_stock, pipeline_qty, avg_demand_7d, lead_time_est]
+        # Observation space:
+        # [inventory, safety_stock, pipeline_qty, avg_demand_7d, lead_time_est,
+        #  holding_cost_coef, stockout_cost_coef, ordering_cost_coef]
         self.observation_space = spaces.Box(
-            low=np.array([0.0, 0.0, 0.0, 0.0, 1.0]),
-            high=np.array([500.0, 300.0, 500.0, 200.0, 5.0]),
+            low=np.array([0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
+            high=np.array([500.0, 300.0, 500.0, 200.0, 5.0, 2.0, 20.0, 20.0]),
             dtype=np.float32
         )
         
@@ -153,7 +168,10 @@ class SupplyChainEnv(gym.Env):
             float(self.safety_stock),
             float(pipeline_qty),
             float(avg_demand_7d),
-            float(lead_time_est)
+            float(lead_time_est),
+            float(self.holding_cost),
+            float(self.stockout_cost),
+            float(self.ordering_cost),
         ], dtype=np.float32)
         
         return state
@@ -162,12 +180,12 @@ class SupplyChainEnv(gym.Env):
         """Map normalized PPO action into safety-stock adjustment."""
         clipped_action = np.clip(np.asarray(action, dtype=np.float32), self.action_space.low, self.action_space.high)
         safety_signal = float(clipped_action[0])
-        safety_stock_adj = safety_signal * 10.0
+        safety_stock_adj = safety_signal * self.safety_adjustment_max
         return safety_stock_adj, safety_signal
 
     def encode_action(self, safety_stock_adj: float = 0.0, *_unused) -> np.ndarray:
         """Map safety-stock adjustment into normalized action space."""
-        safety_signal = np.clip(float(safety_stock_adj) / 10.0, -1.0, 1.0)
+        safety_signal = np.clip(float(safety_stock_adj) / self.safety_adjustment_max, -1.0, 1.0)
         return np.array([safety_signal], dtype=np.float32)
     
     def _process_pipeline(self) -> int:
@@ -230,7 +248,7 @@ class SupplyChainEnv(gym.Env):
         self.fulfilled_demand_history.append(fulfilled_demand)
         
         # Calculate costs
-        holding_cost_incurred = self.holding_cost * max(0, self.inventory - self.safety_stock)
+        holding_cost_incurred = self.holding_cost * self.inventory
         stockout_cost_incurred = self.stockout_cost * unfulfilled_demand
         
         total_cost = holding_cost_incurred + stockout_cost_incurred + ordering_cost_incurred
@@ -240,15 +258,15 @@ class SupplyChainEnv(gym.Env):
         updated_lead_time_est = np.mean([days for _, days in self.pipeline]) if self.pipeline else (self.lead_time_min + self.lead_time_max) / 2
         updated_target_position = self.safety_stock + (avg_demand * updated_lead_time_est)
         coverage_gap = max(0.0, updated_target_position - updated_inventory_position)
-        coverage_penalty = 0.2 * coverage_gap
+        coverage_penalty = self.coverage_penalty_coef * coverage_gap
         
         # Reward: negative cost + bonus for good service level
         service_level = fulfilled_demand / demand if demand > 0 else 1.0
         reward = -(total_cost + coverage_penalty)
         
         # Bonus for maintaining good service level
-        if service_level > 0.95:
-            reward += 5.0
+        if service_level > self.service_bonus_threshold:
+            reward += self.service_bonus
         
         # Track history
         self.inventory_history.append(self.inventory)
