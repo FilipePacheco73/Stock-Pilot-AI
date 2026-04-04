@@ -18,6 +18,7 @@ from src.environment.supply_chain_env import SupplyChainEnv
 from src.agents.baseline_policy import BaselinePolicy
 from src.utils.metrics import SimulationMetrics
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
 
 
 class ScheduledCostSupplyChainEnv(SupplyChainEnv):
@@ -401,32 +402,40 @@ def test_train_and_visualize():
     # Setup
     model_path = Path("models/test_model.zip")
     model_path.parent.mkdir(parents=True, exist_ok=True)
-    training_timesteps = 100000
+    training_timesteps = 400000
+    n_envs = 8
     train_days = 2000
     test_days = 365
     env_seed = 42
     env_tuning = {
-        "safety_adjustment_max": 40.0,
-        "coverage_penalty_coef": 0.1,
+        "safety_adjustment_max": 60.0,
+        "coverage_penalty_coef": 0.0,
         "service_bonus": 0.0,
         "service_bonus_threshold": 0.97,
     }
     
-    # Create training environment
-    print("\n1️⃣  Creating training environment...")
-    train_env = ScheduledCostSupplyChainEnv(seed=42, base_seed=42, schedule_window=30, **env_tuning)
+    # Create vectorized training environment to improve sample efficiency.
+    print(f"\n1️⃣  Creating training environment ({n_envs} parallel envs)...")
+    train_env = make_vec_env(
+        lambda: ScheduledCostSupplyChainEnv(seed=42, base_seed=42, schedule_window=30, **env_tuning),
+        n_envs=n_envs,
+        seed=42,
+    )
     
     # Create or load model
     print("2️⃣  Creating PPO model...")
     model = PPO(
         "MlpPolicy",
         train_env,
-        learning_rate=1e-3,
-        n_steps=512,
-        batch_size=64,
+        learning_rate=3e-4,
+        n_steps=1024,
+        batch_size=256,
         n_epochs=10,
         gamma=0.99,
+        gae_lambda=0.95,
+        clip_range=0.2,
         ent_coef=0.01,
+        vf_coef=0.7,
         seed=42,
         verbose=0,
     )
@@ -436,7 +445,7 @@ def test_train_and_visualize():
     model.learn(
         total_timesteps=training_timesteps,
         reset_num_timesteps=False,
-        progress_bar=True,
+        progress_bar=False,
     )
     model.save(str(model_path))
     print("✅ Model trained and saved!")

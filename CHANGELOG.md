@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.1] - 2026-04-04
+
+### Changed
+
+**Dashboard RL Alignment**
+- Aligned `dashboard/app.py` training setup with the current pure-cost tuning used by `test_visualization.py`
+- Increased dashboard retraining target from `200,000` to `400,000` timesteps
+- Switched dashboard PPO collection to `8` parallel environments for the same higher-throughput training pattern used in the visualization benchmark
+- Increased dashboard `safety_adjustment_max` from `40.0` to `60.0`
+- Removed dashboard reward shaping by setting `coverage_penalty_coef=0.0` and keeping `service_bonus=0.0`
+- Updated fresh dashboard PPO configuration to use `batch_size=256` and `vf_coef=0.7`
+
+### Validated
+
+**Latest Pure-Cost Benchmark**
+- Latest `test_visualization.py` run achieved `+4.2%` test cost reduction versus the baseline (`$47,977.70` vs `$50,103.80`)
+- Benchmark artifacts saved under `results/2026-04-04_08-50-36/`
+
 ## [0.5.0] - 2026-04-03
 
 ### Added

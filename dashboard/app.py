@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.env_util import make_vec_env
 
 # Local imports
 import sys
@@ -31,8 +32,14 @@ WINDOW_DAYS = 365
 SCHEDULE_DAYS = 200_000
 DEFAULT_SEED = 42
 SAFETY_STOCK_MAX = 500
-TARGET_DASHBOARD_TRAINING_STEPS = 200_000
+TARGET_DASHBOARD_TRAINING_STEPS = 400_000
 TRAIN_SCHEDULE_WINDOW = 30
+TRAIN_EPISODE_LENGTH = 365
+DASHBOARD_TRAIN_N_ENVS = 8
+RL_SAFETY_ADJUSTMENT_MAX = 60.0
+RL_COVERAGE_PENALTY = 0.0
+RL_SERVICE_BONUS = 0.0
+RL_SERVICE_BONUS_THRESHOLD = 0.97
 
 
 def generate_cost_multiplier_schedule(days: int, seed: int, window: int = TRAIN_SCHEDULE_WINDOW):
@@ -178,10 +185,10 @@ def create_env_pair(seed: int = DEFAULT_SEED):
         "holding_cost": BASE_HOLDING_COST,
         "stockout_cost": BASE_STOCKOUT_COST,
         "ordering_cost": BASE_ORDERING_COST,
-        "safety_adjustment_max": 40.0,
-        "coverage_penalty_coef": 0.1,
-        "service_bonus": 0.0,
-        "service_bonus_threshold": 0.97,
+        "safety_adjustment_max": RL_SAFETY_ADJUSTMENT_MAX,
+        "coverage_penalty_coef": RL_COVERAGE_PENALTY,
+        "service_bonus": RL_SERVICE_BONUS,
+        "service_bonus_threshold": RL_SERVICE_BONUS_THRESHOLD,
     }
 
     env_manual = ReplayScenarioEnv(
@@ -209,17 +216,21 @@ def create_env_pair(seed: int = DEFAULT_SEED):
 
 
 def load_or_train_model(progress_bar, status_box):
-    """Always train the RL policy for 100k steps when dashboard initializes."""
-    env = ScheduledCostTrainingEnv(
+    """Train or refresh the RL policy using the same pure-cost setup as test_visualization."""
+    env = make_vec_env(
+        lambda: ScheduledCostTrainingEnv(
+            seed=DEFAULT_SEED,
+            episode_length=TRAIN_EPISODE_LENGTH,
+            schedule_window=TRAIN_SCHEDULE_WINDOW,
+            base_seed=DEFAULT_SEED,
+            safety_stock_max=SAFETY_STOCK_MAX,
+            safety_adjustment_max=RL_SAFETY_ADJUSTMENT_MAX,
+            coverage_penalty_coef=RL_COVERAGE_PENALTY,
+            service_bonus=RL_SERVICE_BONUS,
+            service_bonus_threshold=RL_SERVICE_BONUS_THRESHOLD,
+        ),
+        n_envs=DASHBOARD_TRAIN_N_ENVS,
         seed=DEFAULT_SEED,
-        episode_length=365,
-        schedule_window=TRAIN_SCHEDULE_WINDOW,
-        base_seed=DEFAULT_SEED,
-        safety_stock_max=SAFETY_STOCK_MAX,
-        safety_adjustment_max=40.0,
-        coverage_penalty_coef=0.1,
-        service_bonus=0.0,
-        service_bonus_threshold=0.97,
     )
 
     model_candidates = [
@@ -263,12 +274,13 @@ def load_or_train_model(progress_bar, status_box):
             seed=DEFAULT_SEED,
             learning_rate=3e-4,
             n_steps=1024,
-            batch_size=64,
+            batch_size=256,
             n_epochs=10,
             gamma=0.99,
             gae_lambda=0.95,
             clip_range=0.2,
             ent_coef=0.01,
+            vf_coef=0.7,
             verbose=0,
         )
         train_steps = TARGET_DASHBOARD_TRAINING_STEPS

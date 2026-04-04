@@ -1,150 +1,241 @@
-# StockPilot 🚀
+# StockPilot
 
-**An AI-Powered Supply Chain Simulation with Reinforcement Learning**
+StockPilot is a supply-chain simulation project built around a custom Gymnasium-style environment and a PPO agent from Stable-Baselines3. The current setup compares a rule-based baseline with an RL policy that dynamically adjusts safety stock under stochastic demand, variable lead times, and changing cost regimes.
 
-StockPilot is a simulation framework that demonstrates how a Reinforcement Learning agent learns to optimize safety stock levels in a dynamic supply chain environment, with detailed training and evaluation charts saved automatically.
+The project currently has two main user-facing flows:
+- `test_visualization.py`: train, evaluate, and export timestamped benchmark artifacts
+- `dashboard/app.py`: interactive Streamlit dashboard with live Manual vs RL comparison
 
-## Features
+## Current Project State
 
-✨ **Core Capabilities**
-- **RL-Powered Optimization**: Stable-Baselines3 PPO agent learns to balance inventory costs, stockouts, and service levels
-- **Realistic Supply Chain Dynamics**: Variable lead times, stochastic demand with spikes, and multiple cost factors
-- **Baseline Comparison**: Rule-based fixed safety stock policy for performance benchmarking
-- **Automated Visualization**: 3×2 timestamped charts showing inventory, safety stock evolution, and cost multiplier parameters
-- **Cost Breakdown Analysis**: Holding, stockout, and ordering costs tracked separately for Baseline and RL
-- **Domain Randomization**: Cost schedules change every 30 days during training, creating adaptive optimization challenges
-- **Contextual Agent**: Observation space includes cost multipliers, enabling context-aware decision making
+The current benchmark and dashboard are aligned around a cost-first setup:
+- PPO training with `400000` timesteps
+- `8` parallel environments during training
+- cost schedule randomization every `30` days
+- `safety_adjustment_max = 60.0`
+- `coverage_penalty_coef = 0.0`
+- `service_bonus = 0.0`
+
+In other words, the current comparison is tuned to minimize total cost, not to preserve service level.
+
+## Latest Benchmark
+
+Latest benchmark artifacts were generated in `results/2026-04-04_08-50-36/`.
+
+Test-period result versus the baseline with safety stock `300`:
+- Baseline total cost: `$50,103.80`
+- RL total cost: `$47,977.70`
+- RL cost reduction: `+4.2%`
+- RL saved: `$2,126.10`
+
+Files produced by a benchmark run:
+- `metrics.json`
+- `summary.txt`
+- `train_period_chart.png`
+- `test_period_chart.png`
 
 ## Project Structure
 
-```
-stock-pilot-ai/
+```text
+Stock-Pilot-AI/
+├── dashboard/
+│   └── app.py
+├── models/
+│   └── checkpoints/
+├── results/
+│   └── YYYY-MM-DD_HH-MM-SS/
 ├── src/
-│   ├── environment/          # Custom Gym environment
-│   │   ├── supply_chain_env.py
-│   │   └── demand_profiles.py
-│   ├── agents/               # Baseline and RL policies
+│   ├── agents/
 │   │   ├── baseline_policy.py
 │   │   └── rl_trainer.py
+│   ├── environment/
+│   │   ├── demand_profiles.py
+│   │   └── supply_chain_env.py
 │   └── utils/
 │       └── metrics.py
-├── results/                  # Timestamped run outputs
-│   └── YYYY-MM-DD_HH-MM-SS/
-│       ├── train_period_chart.png
-│       ├── test_period_chart.png
-│       ├── metrics.json
-│       └── summary.txt
-├── models/                   # Trained model checkpoints
-├── tests/                    # Test suite
-├── test_visualization.py     # Main training & evaluation script
+├── tests/
+│   └── test_quick.py
+├── main.py
+├── run_tests.py
+├── test_visualization.py
 └── requirements.txt
 ```
 
-## Tech Stack
+## Environment Model
 
-- **Simulation**: Custom Gym-style environment
-- **RL Framework**: Stable-Baselines3 (PPO agent)
-- **Visualization**: Matplotlib (PNG charts per run)
-- **Data Processing**: NumPy, Pandas
+The environment models a single-stage inventory control problem with:
+- stochastic daily demand with occasional spikes
+- variable lead times from `1` to `5` days
+- holding, stockout, and ordering costs
+- automatic replenishment logic based on inventory position and safety stock
 
-## Quick Start
+### Observation State
 
-### Installation
+The observation is 8-dimensional:
+- current inventory
+- current safety stock
+- pipeline quantity
+- 7-day average demand
+- estimated lead time
+- current holding cost
+- current stockout cost
+- current ordering cost
+
+### Action
+
+The RL action is a continuous safety-stock adjustment signal.
+
+The environment converts the normalized PPO action into a real safety-stock adjustment bounded by `safety_adjustment_max`.
+
+### Reward
+
+The base environment supports cost shaping, but the current benchmark and dashboard configuration use pure cost-focused training:
+
+```text
+reward = -(holding_cost + stockout_cost + ordering_cost)
+```
+
+That is achieved in the active benchmark/dashboard tuning by setting:
+- `coverage_penalty_coef = 0.0`
+- `service_bonus = 0.0`
+
+## Main Components
+
+### `test_visualization.py`
+
+This is the main benchmark script.
+
+It does the following:
+- trains a PPO model with domain-randomized costs
+- evaluates baseline and RL on a train period and a test period
+- writes timestamped metrics and a text summary
+- exports charts comparing inventory behavior and cumulative costs
+
+### `dashboard/app.py`
+
+The dashboard runs a live comparison between:
+- a manual scenario where the user sets target safety stock
+- an RL scenario that adapts safety stock automatically
+
+On startup, the dashboard trains or refreshes the RL model before starting the live simulation.
+
+### `main.py`
+
+This is the older pipeline entry point for generic environment testing, baseline evaluation, and PPO training through `RLTrainer`.
+
+It still works, but the most up-to-date benchmark path is `test_visualization.py`.
+
+## How To Run
+
+### 1. Install dependencies
+
+If you are using the project virtual environment in this repository on Windows:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Generic command:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Train the RL Agent & Generate Charts
+### 2. Run the benchmark
+
+Windows using the existing project environment:
+
+```powershell
+.\venv\Scripts\python.exe test_visualization.py
+```
+
+Generic command:
 
 ```bash
 python test_visualization.py
 ```
 
-This will:
-1. Train a PPO agent for 100,000 timesteps with domain randomization (cost schedule changes every 30 days)
-2. Evaluate both Baseline and RL on train and test periods with synchronized cost schedules
-3. Save 3×2 charts (inventory, safety stock, cost multiplier evolution), metrics JSON, and summary to `results/<timestamp>/`
-4. Display performance comparison: typically **+3-8% cost reduction** vs Baseline
+This run will:
+- train PPO with the current cost-first configuration
+- compare RL against the fixed baseline
+- save timestamped outputs under `results/`
 
-## How It Works
+### 3. Run the dashboard
 
-### Environment State (8-Dimensional)
-- Current inventory level
-- Safety stock level
-- Incoming orders (pipeline status)
-- Recent demand history (7-day average)
-- Estimated lead time
-- **Current holding cost multiplier** (domain randomization signal)
-- **Current stockout cost multiplier** (domain randomization signal)
-- **Current ordering cost multiplier** (domain randomization signal)
+Windows using the existing project environment:
 
-### RL Agent Actions
-- Adjust safety stock level dynamically
-- Place replenishment orders
+```powershell
+.\venv\Scripts\python.exe -m streamlit run dashboard/app.py
+```
 
-### Reward Function
-Maximize efficiency by balancing:
-- ✅ Minimizing stockouts (lost sales)
-- ✅ Minimizing excess inventory (holding costs)
-- ✅ Minimizing total operational cost
+Generic command:
 
-## Scenario
+```bash
+streamlit run dashboard/app.py
+```
 
-**Supply Chain Structure:**
-- 1 Supplier with variable lead times
-- 1 Factory producing final products
-- Customers with uncertain demand
-- Discrete time-step simulation (days)
+What to expect:
+- the app retrains or refreshes the RL policy at startup
+- the page then shows rolling Manual vs RL comparison over the last 365 simulated days
+- sidebar controls let you change cost multipliers and manual safety stock
 
-**Key Dynamics:**
-- Random demand with variability and spikes
-- Variable lead times (1-5 days)
-- Holding costs, stockout penalties, ordering costs
+### 4. Run the quick tests
 
-## Output Charts
+Windows using the existing project environment:
 
-Each run produces two 3×2 charts (Train and Test period):
+```powershell
+.\venv\Scripts\python.exe run_tests.py
+```
 
-| Position | Content |
-|----------|----------|
-| **Row 1** | |
-| Left | Baseline Inventory vs Safety Stock |
-| Right | RL Inventory vs Adaptive Safety Stock (oscillating in response to cost changes) |
-| **Row 2** | |
-| Left | Baseline cumulative cost breakdown (Holding / Stockout / Ordering) with total |
-| Right | RL cumulative cost breakdown (Holding / Stockout / Ordering) with total |
-| **Row 3** | |
-| Left | Holding cost multiplier evolution (30-day step changes) |
-| Right | Stockout & Ordering cost multipliers (step-function visualization) |
+Generic command:
 
-## Results & Metrics
+```bash
+python run_tests.py
+```
 
-Saved automatically to `results/<timestamp>/metrics.json`:
+### 5. Run the older training pipeline
 
-| Metric | Description |
-|--------|-------------|
-| **Total Cost** | Sum of holding + stockout + ordering costs |
-| **Service Level** | % of demand fulfilled without stockouts |
-| **Stockout Count** | Number of stockout events |
-| **Avg Inventory** | Average inventory level over time |
+```bash
+python main.py
+```
 
-## Latest Results (v0.4.0)
+Use this if you want the generic trainer flow in `src/agents/rl_trainer.py`. For the latest benchmark logic and exported charts, prefer `test_visualization.py`.
 
-**Test Period Performance:**
-- **Cost Reduction**: +3.8% RL vs Baseline ($48,187 saved $1,916)
-- **Service Level**: 93.91% (Baseline 97.01%) — intentional trade-off for cost optimization
-- **Inventory**: 161.1 units avg (Baseline 209.2) — 22.9% reduction
-- **Stockout Events**: 30 (Baseline 12) — acceptable for cost-focused strategy
+## Output Artifacts
 
-**Training Setup:**
-- 100,000 timesteps with domain randomization
-- Action scaling: safety_stock_adj ∈ [-40, +40] units/step
-- Service bonus: 0.0 (cost-first optimization)
-- Coverage penalty: 0.1 (maintains minimum service floor)
+Each benchmark run writes a new timestamped directory under `results/` containing:
+- `metrics.json`: machine-readable metrics for train/test periods
+- `summary.txt`: human-readable comparison summary
+- `train_period_chart.png`: train-period chart set
+- `test_period_chart.png`: test-period chart set
 
----
+The charts include:
+- baseline inventory trajectory
+- RL inventory and adaptive safety stock trajectory
+- cumulative cost breakdown for baseline and RL
+- cost parameter schedules over time
 
-**Status:** Stable  
-**Last Updated:** April 2026  
-**Version:** 0.4.0
+## Dependencies
+
+Core dependencies used by the current project:
+- `gymnasium`
+- `stable-baselines3`
+- `torch`
+- `numpy`
+- `pandas`
+- `matplotlib`
+- `streamlit`
+- `plotly`
+
+All are listed in `requirements.txt`.
+
+## Notes
+
+- The repository currently uses `venv/` as the project virtual environment directory.
+- The latest tuned benchmark path is `test_visualization.py`.
+- The dashboard has been aligned to the same pure-cost training pattern used by the latest benchmark.
+
+## Version
+
+- Current documented release: `0.5.1`
+- Last updated: April 2026
